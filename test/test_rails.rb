@@ -160,7 +160,7 @@ class TestConnect < Minitest::Test
     assert_equal [], call[:extra_args]
 
     assert_equal "127.0.0.1", adapter.connection_parameters[:host]
-    assert_equal 7932, adapter.connection_parameters[:port]
+    assert_equal GoldLapel::DEFAULT_PORT, adapter.connection_parameters[:port]
     assert_equal 1, adapter.super_called
   end
 
@@ -227,6 +227,6 @@ class TestConnect < Minitest::Test
     assert_equal 2, adapter.super_called
     # Params still point at proxy
     assert_equal "127.0.0.1", adapter.connection_parameters[:host]
-    assert_equal 7932, adapter.connection_parameters[:port]
+    assert_equal GoldLapel::DEFAULT_PORT, adapter.connection_parameters[:port]
   end
 end
