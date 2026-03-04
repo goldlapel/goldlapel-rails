@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.license     = "Proprietary"
   s.metadata    = {
     "homepage_uri"    => "https://goldlapel.com",
-    "source_code_uri" => "https://github.com/Gold-Lapel/goldlapel-rails",
+    "source_code_uri" => "https://github.com/goldlapel/goldlapel-rails",
   }
 
   s.required_ruby_version = ">= 3.2.0"
