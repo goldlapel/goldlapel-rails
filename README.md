@@ -1,0 +1,73 @@
+# goldlapel-rails
+
+Rails integration for [Gold Lapel](https://goldlapel.com) — the self-optimizing Postgres proxy.
+
+Auto-patches ActiveRecord's PostgreSQL adapter to start the Gold Lapel proxy on first connection and route all queries through it. Zero config — just add the gem.
+
+## Installation
+
+```ruby
+# Gemfile
+gem "goldlapel-rails"
+```
+
+That's it. Your existing `config/database.yml` works unchanged.
+
+## How It Works
+
+When ActiveRecord opens its first PostgreSQL connection, `goldlapel-rails`:
+
+1. Reads your connection params (host, port, user, password, database)
+2. Starts the Gold Lapel proxy pointing at your database
+3. Rewrites the connection to go through the proxy (`127.0.0.1:7932`)
+
+On reconnect, the proxy is already running — the adapter reuses the rewritten params.
+
+## Optional Configuration
+
+You can pass Gold Lapel options in `config/database.yml`:
+
+```yaml
+production:
+  adapter: postgresql
+  host: db.example.com
+  database: mydb
+  username: user
+  password: pass
+  goldlapel:
+    port: 9000                          # proxy listen port (default: 7932)
+    extra_args:
+      - "--threshold-duration-ms"
+      - "200"
+```
+
+## Multiple Databases
+
+Each database needs a different proxy port:
+
+```yaml
+production:
+  primary:
+    adapter: postgresql
+    host: primary-db.example.com
+    database: myapp
+    goldlapel:
+      port: 7932
+
+  analytics:
+    adapter: postgresql
+    host: analytics-db.example.com
+    database: analytics
+    goldlapel:
+      port: 7933
+```
+
+## Requirements
+
+- Ruby >= 3.2
+- Rails >= 7.0
+- The [`goldlapel`](https://rubygems.org/gems/goldlapel) gem (added automatically as a dependency)
+
+## License
+
+Proprietary. See [goldlapel.com](https://goldlapel.com) for licensing.

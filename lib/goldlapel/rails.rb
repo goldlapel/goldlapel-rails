@@ -1,0 +1,62 @@
+require "uri"
+require "goldlapel"
+
+module GoldLapel
+  module Rails
+    def self.build_upstream_url(params)
+      host = (params[:host].nil? || params[:host].empty?) ? "localhost" : params[:host]
+      port = (params[:port].nil? || params[:port].to_s.empty?) ? "5432" : params[:port].to_s
+
+      if host.start_with?("/")
+        raise ArgumentError, "Gold Lapel cannot proxy Unix socket connections (host: #{host})"
+      end
+
+      userinfo = nil
+      if params[:user] && !params[:user].empty?
+        userinfo = URI.encode_www_form_component(params[:user])
+        if params[:password] && !params[:password].empty?
+          userinfo += ":#{URI.encode_www_form_component(params[:password])}"
+        end
+      end
+
+      dbname = params[:dbname] ? URI.encode_www_form_component(params[:dbname]) : ""
+
+      authority = userinfo ? "#{userinfo}@#{host}:#{port}" : "#{host}:#{port}"
+      "postgresql://#{authority}/#{dbname}"
+    end
+
+    module PostgreSQLExtension
+      private
+
+      def connect
+        unless @goldlapel_started
+          @goldlapel_started = true
+
+          gl_config = @config.is_a?(Hash) ? @config[:goldlapel] || {} : {}
+          port = gl_config[:port]
+          extra_args = gl_config[:extra_args] || []
+
+          upstream = GoldLapel::Rails.build_upstream_url(@connection_parameters)
+          GoldLapel.start(upstream, port: port, extra_args: extra_args)
+
+          proxy_port = port || 7932
+          @connection_parameters[:host] = "127.0.0.1"
+          @connection_parameters[:port] = proxy_port
+        end
+
+        super
+      end
+    end
+
+    class Railtie < ::Rails::Railtie
+      initializer "goldlapel.configure" do
+        ActiveSupport.on_load(:active_record) do
+          require "active_record/connection_adapters/postgresql_adapter"
+          ActiveRecord::ConnectionAdapters::PostgreSQLAdapter.prepend(
+            GoldLapel::Rails::PostgreSQLExtension
+          )
+        end
+      end
+    end
+  end
+end
