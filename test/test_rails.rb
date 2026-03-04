@@ -2,6 +2,8 @@ require "minitest/autorun"
 
 # Stub goldlapel gem BEFORE requiring rails.rb (which does `require "goldlapel"`)
 module GoldLapel
+  DEFAULT_PORT = 7932
+
   @start_calls = []
 
   def self.start_calls
@@ -76,7 +78,7 @@ class TestBuildUpstreamUrl < Minitest::Test
       user: "user@org", password: "p@ss:word/special", dbname: "my db"
     )
     assert_equal(
-      "postgresql://user%40org:p%40ss%3Aword%2Fspecial@db.example.com:5432/my+db",
+      "postgresql://user%40org:p%40ss%3Aword%2Fspecial@db.example.com:5432/my%20db",
       url
     )
   end
