@@ -32,10 +32,11 @@ module GoldLapel
         unless @goldlapel_started
           gl_config = @config.is_a?(Hash) ? @config[:goldlapel] || {} : {}
           port = gl_config[:port]
+          config = gl_config[:config]
           extra_args = gl_config[:extra_args] || []
 
           upstream = GoldLapel::Rails.build_upstream_url(@connection_parameters)
-          GoldLapel.start(upstream, port: port, extra_args: extra_args)
+          GoldLapel.start(upstream, config: config, port: port, extra_args: extra_args)
 
           proxy_port = port || GoldLapel::DEFAULT_PORT
           @connection_parameters[:host] = "127.0.0.1"

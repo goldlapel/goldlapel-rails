@@ -10,8 +10,8 @@ module GoldLapel
     @start_calls
   end
 
-  def self.start(upstream, port: nil, extra_args: [])
-    @start_calls << { upstream: upstream, port: port, extra_args: extra_args }
+  def self.start(upstream, config: nil, port: nil, extra_args: [])
+    @start_calls << { upstream: upstream, config: config, port: port, extra_args: extra_args }
   end
 
   def self.reset!
@@ -156,6 +156,7 @@ class TestConnect < Minitest::Test
     assert_equal 1, GoldLapel.start_calls.length
     call = GoldLapel.start_calls.first
     assert_equal "postgresql://u:p@db.example.com:5432/mydb", call[:upstream]
+    assert_nil call[:config]
     assert_nil call[:port]
     assert_equal [], call[:extra_args]
 
@@ -193,6 +194,58 @@ class TestConnect < Minitest::Test
     assert_equal ["--threshold-duration-ms", "200"], GoldLapel.start_calls.first[:extra_args]
   end
 
+  def test_config_hash_from_config
+    adapter = FakeAdapter.new(
+      config: { goldlapel: { config: { mode: "butler", pool_size: 30 } } },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.start_calls.first
+    assert_equal({ mode: "butler", pool_size: 30 }, call[:config])
+  end
+
+  def test_config_hash_with_port_and_extra_args
+    adapter = FakeAdapter.new(
+      config: {
+        goldlapel: {
+          port: 9000,
+          config: { mode: "butler", disable_n1: true },
+          extra_args: ["--verbose"]
+        }
+      },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.start_calls.first
+    assert_equal 9000, call[:port]
+    assert_equal({ mode: "butler", disable_n1: true }, call[:config])
+    assert_equal ["--verbose"], call[:extra_args]
+  end
+
+  def test_nil_config_when_not_specified
+    adapter = FakeAdapter.new(
+      config: { goldlapel: { port: 9000 } },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    assert_nil GoldLapel.start_calls.first[:config]
+  end
+
   def test_missing_goldlapel_config_uses_defaults
     adapter = FakeAdapter.new(
       config: {},
@@ -205,6 +258,7 @@ class TestConnect < Minitest::Test
     adapter.send(:connect)
 
     call = GoldLapel.start_calls.first
+    assert_nil call[:config]
     assert_nil call[:port]
     assert_equal [], call[:extra_args]
   end

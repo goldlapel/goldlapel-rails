@@ -36,9 +36,22 @@ production:
   password: pass
   goldlapel:
     port: 9000                          # proxy listen port (default: 7932)
+    config:                             # proxy configuration
+      mode: butler
+      pool_size: 30
+      disable_n1: true
     extra_args:
       - "--threshold-duration-ms"
       - "200"
+```
+
+The `config` hash maps directly to Gold Lapel's configuration options. Use snake_case keys:
+
+```ruby
+# config/environments/production.rb (programmatic alternative)
+config.database_configuration["production"]["goldlapel"] = {
+  config: { mode: "butler", pool_size: 30, disable_n1: true }
+}
 ```
 
 ## Multiple Databases
