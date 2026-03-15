@@ -39,6 +39,7 @@ module GoldLapel
           upstream = GoldLapel::Rails.build_upstream_url(@connection_parameters)
 
           begin
+            ENV["GOLDLAPEL_CLIENT"] = "rails"
             GoldLapel.start(upstream, config: config, port: port, extra_args: extra_args)
           rescue => e
             ::Rails.logger.warn("[Gold Lapel] Proxy failed to start: #{e.message} — falling back to direct connection")
