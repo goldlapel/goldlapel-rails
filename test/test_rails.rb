@@ -25,6 +25,24 @@ module Rails
   class Railtie
     def self.initializer(name, &block); end
   end
+
+  class FakeLogger
+    attr_reader :warnings
+
+    def initialize
+      @warnings = []
+    end
+
+    def warn(msg)
+      @warnings << msg
+    end
+  end
+
+  @logger = FakeLogger.new
+
+  def self.logger
+    @logger
+  end
 end
 
 module ActiveSupport
@@ -282,5 +300,57 @@ class TestConnect < Minitest::Test
     # Params still point at proxy
     assert_equal "127.0.0.1", adapter.connection_parameters[:host]
     assert_equal GoldLapel::DEFAULT_PORT, adapter.connection_parameters[:port]
+  end
+
+  def test_string_keys_from_yaml_config
+    # Rails YAML parsing produces string keys for nested hashes — symbolize_keys
+    # is shallow, so the goldlapel sub-hash arrives with string keys.
+    adapter = FakeAdapter.new(
+      config: { goldlapel: { "port" => 9000, "extra_args" => ["--verbose"] } },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.start_calls.first
+    assert_equal 9000, call[:port]
+    assert_equal ["--verbose"], call[:extra_args]
+    assert_equal 9000, adapter.connection_parameters[:port]
+  end
+
+  def test_graceful_fallback_on_start_failure
+    # Temporarily make GoldLapel.start raise
+    GoldLapel.define_singleton_method(:start) do |upstream, config: nil, port: nil, extra_args: []|
+      raise RuntimeError, "binary not found"
+    end
+
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    # Should not raise — falls back to direct connection
+    adapter.send(:connect)
+
+    # Connection parameters should be unchanged (no proxy rewrite)
+    assert_equal "db.example.com", adapter.connection_parameters[:host]
+    assert_equal "5432", adapter.connection_parameters[:port]
+
+    # Super (actual connect) should still be called
+    assert_equal 1, adapter.super_called
+
+    # Warning logged
+    assert Rails.logger.warnings.any? { |w| w.include?("binary not found") }
+  ensure
+    # Restore original GoldLapel.start
+    GoldLapel.define_singleton_method(:start) do |upstream, config: nil, port: nil, extra_args: []|
+      @start_calls << { upstream: upstream, config: config, port: port, extra_args: extra_args }
+    end
   end
 end

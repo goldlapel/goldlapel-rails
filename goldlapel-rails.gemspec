@@ -18,4 +18,5 @@ Gem::Specification.new do |s|
 
   s.add_dependency "goldlapel"
   s.add_dependency "activerecord", ">= 7.0"
+  s.add_dependency "railties", ">= 7.0"
 end

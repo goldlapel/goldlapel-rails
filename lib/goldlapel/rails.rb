@@ -31,12 +31,20 @@ module GoldLapel
       def connect
         unless @goldlapel_started
           gl_config = @config.is_a?(Hash) ? @config[:goldlapel] || {} : {}
+          gl_config = gl_config.transform_keys(&:to_sym) if gl_config.is_a?(Hash)
           port = gl_config[:port]
           config = gl_config[:config]
           extra_args = gl_config[:extra_args] || []
 
           upstream = GoldLapel::Rails.build_upstream_url(@connection_parameters)
-          GoldLapel.start(upstream, config: config, port: port, extra_args: extra_args)
+
+          begin
+            GoldLapel.start(upstream, config: config, port: port, extra_args: extra_args)
+          rescue => e
+            ::Rails.logger.warn("[Gold Lapel] Proxy failed to start: #{e.message} — falling back to direct connection")
+            @goldlapel_started = true
+            return super
+          end
 
           proxy_port = port || GoldLapel::DEFAULT_PORT
           @connection_parameters[:host] = "127.0.0.1"
