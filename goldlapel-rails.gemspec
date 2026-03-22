@@ -5,7 +5,7 @@ Gem::Specification.new do |s|
   s.description = "Auto-patches ActiveRecord's PostgreSQL adapter to route queries through the Gold Lapel proxy. Zero config — just add the gem."
   s.authors     = ["Stephen Gibson"]
   s.homepage    = "https://goldlapel.com"
-  s.license     = "Proprietary"
+  s.license     = "MIT"
   s.metadata    = {
     "homepage_uri"    => "https://goldlapel.com",
     "source_code_uri" => "https://github.com/goldlapel/goldlapel-rails",
