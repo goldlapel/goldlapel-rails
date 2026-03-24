@@ -1,8 +1,8 @@
 # goldlapel-rails
 
-Rails integration for [Gold Lapel](https://goldlapel.com) — the self-optimizing Postgres proxy.
+Rails integration for [Gold Lapel](https://goldlapel.com) — the self-optimizing Postgres proxy. Includes L1 native cache — an in-process cache that serves repeated reads in microseconds with no TCP round-trip.
 
-Auto-patches ActiveRecord's PostgreSQL adapter to start the Gold Lapel proxy on first connection and route all queries through it. Zero config — just add the gem.
+Auto-patches ActiveRecord's PostgreSQL adapter to start the Gold Lapel proxy on first connection and route all queries through it, with L1 cache enabled automatically. Zero config — just add the gem.
 
 ## Installation
 
@@ -19,9 +19,9 @@ When ActiveRecord opens its first PostgreSQL connection, `goldlapel-rails`:
 
 1. Reads your connection params (host, port, user, password, database)
 2. Starts the Gold Lapel proxy pointing at your database
-3. Rewrites the connection to go through the proxy (`127.0.0.1:7932`)
+3. Returns a connection through the proxy (`127.0.0.1:7932`) with L1 native cache active
 
-On reconnect, the proxy is already running — the adapter reuses the rewritten params.
+On reconnect, the proxy is already running — the adapter reuses the rewritten params. Repeated reads hit the L1 cache and return in microseconds without a TCP round-trip.
 
 ## Optional Configuration
 
