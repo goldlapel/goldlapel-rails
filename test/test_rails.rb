@@ -5,17 +5,37 @@ module GoldLapel
   DEFAULT_PORT = 7932
 
   @start_calls = []
+  @wrap_calls = []
 
   def self.start_calls
     @start_calls
+  end
+
+  def self.wrap_calls
+    @wrap_calls
   end
 
   def self.start(upstream, config: nil, port: nil, extra_args: [])
     @start_calls << { upstream: upstream, config: config, port: port, extra_args: extra_args }
   end
 
+  def self.wrap(conn, invalidation_port: nil)
+    @wrap_calls << { conn: conn, invalidation_port: invalidation_port }
+    WrappedConnection.new(conn, invalidation_port)
+  end
+
   def self.reset!
     @start_calls = []
+    @wrap_calls = []
+  end
+
+  class WrappedConnection
+    attr_reader :real_conn, :invalidation_port
+
+    def initialize(real_conn, invalidation_port)
+      @real_conn = real_conn
+      @invalidation_port = invalidation_port
+    end
   end
 end
 $LOADED_FEATURES << "goldlapel.rb"
@@ -136,10 +156,12 @@ end
 # ---------------------------------------------------------------------------
 
 # Minimal adapter double that includes our extension
+class FakePgConnection; end
+
 class FakeAdapter
   prepend GoldLapel::Rails::PostgreSQLExtension
 
-  attr_accessor :connection_parameters, :config
+  attr_accessor :connection_parameters, :config, :raw_connection
   attr_reader :super_called
 
   def initialize(config:, connection_parameters:)
@@ -152,6 +174,7 @@ class FakeAdapter
 
   def connect
     @super_called += 1
+    @raw_connection = FakePgConnection.new
   end
 end
 
@@ -351,6 +374,176 @@ class TestConnect < Minitest::Test
     # Restore original GoldLapel.start
     GoldLapel.define_singleton_method(:start) do |upstream, config: nil, port: nil, extra_args: []|
       @start_calls << { upstream: upstream, config: config, port: port, extra_args: extra_args }
+    end
+  end
+end
+
+# ---------------------------------------------------------------------------
+# L1 native cache wrapping tests
+# ---------------------------------------------------------------------------
+class TestL1CacheWrapping < Minitest::Test
+  def setup
+    GoldLapel.reset!
+  end
+
+  def test_connect_wraps_raw_connection
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    assert_equal 1, GoldLapel.wrap_calls.length
+    assert_kind_of GoldLapel::WrappedConnection, adapter.raw_connection
+  end
+
+  def test_wrap_receives_raw_pg_connection
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.wrap_calls.first
+    assert_kind_of FakePgConnection, call[:conn]
+  end
+
+  def test_default_invalidation_port_is_proxy_plus_two
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.wrap_calls.first
+    assert_equal GoldLapel::DEFAULT_PORT + 2, call[:invalidation_port]
+  end
+
+  def test_custom_invalidation_port_from_config
+    adapter = FakeAdapter.new(
+      config: { goldlapel: { invalidation_port: 8888 } },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.wrap_calls.first
+    assert_equal 8888, call[:invalidation_port]
+  end
+
+  def test_invalidation_port_derives_from_custom_proxy_port
+    adapter = FakeAdapter.new(
+      config: { goldlapel: { port: 9000 } },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.wrap_calls.first
+    assert_equal 9002, call[:invalidation_port]
+  end
+
+  def test_invalidation_port_string_key_from_yaml
+    adapter = FakeAdapter.new(
+      config: { goldlapel: { "invalidation_port" => 7777 } },
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    call = GoldLapel.wrap_calls.first
+    assert_equal 7777, call[:invalidation_port]
+  end
+
+  def test_reconnect_wraps_each_time
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+    adapter.send(:connect)
+
+    # Proxy started once, but wrap called twice (each connect gets a new PG connection)
+    assert_equal 1, GoldLapel.start_calls.length
+    assert_equal 2, GoldLapel.wrap_calls.length
+  end
+
+  def test_no_wrap_on_fallback
+    GoldLapel.define_singleton_method(:start) do |upstream, config: nil, port: nil, extra_args: []|
+      raise RuntimeError, "binary not found"
+    end
+
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    adapter.send(:connect)
+
+    # Wrap should NOT be called when proxy failed to start
+    assert_equal 0, GoldLapel.wrap_calls.length
+    # raw_connection should be the unwrapped FakePgConnection
+    assert_kind_of FakePgConnection, adapter.raw_connection
+  ensure
+    GoldLapel.define_singleton_method(:start) do |upstream, config: nil, port: nil, extra_args: []|
+      @start_calls << { upstream: upstream, config: config, port: port, extra_args: extra_args }
+    end
+  end
+
+  def test_graceful_fallback_on_wrap_failure
+    GoldLapel.define_singleton_method(:wrap) do |conn, invalidation_port: nil|
+      @wrap_calls << { conn: conn, invalidation_port: invalidation_port }
+      raise RuntimeError, "wrap exploded"
+    end
+
+    adapter = FakeAdapter.new(
+      config: {},
+      connection_parameters: {
+        host: "db.example.com", port: "5432",
+        user: "u", password: "p", dbname: "mydb"
+      }
+    )
+
+    # Should not raise
+    adapter.send(:connect)
+
+    # raw_connection should remain the unwrapped FakePgConnection
+    assert_kind_of FakePgConnection, adapter.raw_connection
+
+    # Warning logged
+    assert Rails.logger.warnings.any? { |w| w.include?("L1 cache wrap failed") }
+  ensure
+    GoldLapel.define_singleton_method(:wrap) do |conn, invalidation_port: nil|
+      @wrap_calls << { conn: conn, invalidation_port: invalidation_port }
+      GoldLapel::WrappedConnection.new(conn, invalidation_port)
     end
   end
 end

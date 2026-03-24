@@ -35,6 +35,7 @@ module GoldLapel
           port = gl_config[:port]
           config = gl_config[:config]
           extra_args = gl_config[:extra_args] || []
+          @goldlapel_invalidation_port = gl_config[:invalidation_port]
 
           upstream = GoldLapel::Rails.build_upstream_url(@connection_parameters)
 
@@ -44,16 +45,29 @@ module GoldLapel
           rescue => e
             ::Rails.logger.warn("[Gold Lapel] Proxy failed to start: #{e.message} — falling back to direct connection")
             @goldlapel_started = true
+            @goldlapel_fallback = true
             return super
           end
 
           proxy_port = port || GoldLapel::DEFAULT_PORT
+          @goldlapel_invalidation_port ||= proxy_port + 2
           @connection_parameters[:host] = "127.0.0.1"
           @connection_parameters[:port] = proxy_port
           @goldlapel_started = true
         end
 
         super
+
+        unless @goldlapel_fallback
+          begin
+            @raw_connection = GoldLapel.wrap(
+              @raw_connection,
+              invalidation_port: @goldlapel_invalidation_port
+            )
+          rescue => e
+            ::Rails.logger.warn("[Gold Lapel] L1 cache wrap failed: #{e.message} — using unwrapped connection")
+          end
+        end
       end
     end
 
