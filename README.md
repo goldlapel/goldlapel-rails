@@ -37,7 +37,7 @@ production:
   goldlapel:
     port: 9000                          # proxy listen port (default: 7932)
     config:                             # proxy configuration
-      mode: butler
+      mode: waiter
       pool_size: 30
       disable_n1: true
     extra_args:
@@ -50,7 +50,7 @@ The `config` hash maps directly to Gold Lapel's configuration options. Use snake
 ```ruby
 # config/environments/production.rb (programmatic alternative)
 config.database_configuration["production"]["goldlapel"] = {
-  config: { mode: "butler", pool_size: 30, disable_n1: true }
+  config: { mode: "waiter", pool_size: 30, disable_n1: true }
 }
 ```
 

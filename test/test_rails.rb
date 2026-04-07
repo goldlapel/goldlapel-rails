@@ -237,7 +237,7 @@ class TestConnect < Minitest::Test
 
   def test_config_hash_from_config
     adapter = FakeAdapter.new(
-      config: { goldlapel: { config: { mode: "butler", pool_size: 30 } } },
+      config: { goldlapel: { config: { mode: "waiter", pool_size: 30 } } },
       connection_parameters: {
         host: "db.example.com", port: "5432",
         user: "u", password: "p", dbname: "mydb"
@@ -247,7 +247,7 @@ class TestConnect < Minitest::Test
     adapter.send(:connect)
 
     call = GoldLapel.start_calls.first
-    assert_equal({ mode: "butler", pool_size: 30 }, call[:config])
+    assert_equal({ mode: "waiter", pool_size: 30 }, call[:config])
   end
 
   def test_config_hash_with_port_and_extra_args
@@ -255,7 +255,7 @@ class TestConnect < Minitest::Test
       config: {
         goldlapel: {
           port: 9000,
-          config: { mode: "butler", disable_n1: true },
+          config: { mode: "waiter", disable_n1: true },
           extra_args: ["--verbose"]
         }
       },
@@ -269,7 +269,7 @@ class TestConnect < Minitest::Test
 
     call = GoldLapel.start_calls.first
     assert_equal 9000, call[:port]
-    assert_equal({ mode: "butler", disable_n1: true }, call[:config])
+    assert_equal({ mode: "waiter", disable_n1: true }, call[:config])
     assert_equal ["--verbose"], call[:extra_args]
   end
 
